@@ -11,8 +11,7 @@ VAGRANTFILE_API_VERSION = "2"
 ENV['VAGRANT_DEFAULT_PROVIDER'] = 'virtualbox'
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
-  config.vm.box = "clusterhq/flocker-tutorial"
-  config.vm.box_version = "= 0.3.2.doc1.1697.ga534b39"
+  config.vm.box_url = "http://storage.googleapis.com/experiments-clusterhq/powerstrip-flocker-demo/flocker-tutorial-0.3.2+doc1-1822-gff051f0.box"
 
   if Vagrant.has_plugin?("vagrant-cachier")
     config.cache.scope = :box
