@@ -14,6 +14,7 @@ EOF
   rm -f /var/run/docker.sock
 }
 
+
 cmd-link-systemd-target() {
 	ln -sf /etc/systemd/system/$1.service /etc/systemd/system/multi-user.target.wants/$1.service
 }
@@ -86,6 +87,8 @@ cmd-start-powerstrip() {
     -v /etc/powerstrip-demo/adapters.yml:/etc/powerstrip/adapters.yml \
     --link powerstrip-flocker:flocker \
     clusterhq/powerstrip:unix-socket
+  sleep 5
+  chgrp vagrant /var/run/docker.sock
 }
 
 cmd-powerstrip-config() {
@@ -114,7 +117,7 @@ Description=Flocker ZFS Agent
 
 [Service]
 TimeoutStartSec=0
-ExecStart=/opt/flocker/bin/flocker-zfs-agent $IP $CONTROLIP
+ExecStart=/usr/sbin/setenforce 0 && /opt/flocker/bin/flocker-zfs-agent $IP $CONTROLIP
 
 [Install]
 WantedBy=multi-user.target
