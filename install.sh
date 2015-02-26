@@ -2,6 +2,12 @@
 
 export FLOCKER_CONTROL_PORT=${FLOCKER_CONTROL_PORT:=80}
 
+# on subsequent vagrant ups - vagrant has not mounted /vagrant/install.sh
+# so we copy it into place
+cmd-copy-script() {
+  cp /vagrant/install.sh /srv/install.sh
+}
+
 cmd-get-flocker-uuid() {
   if [[ ! -f /etc/flocker/volume.json ]]; then
     >&2 echo "/etc/flocker/volume.json NOT FOUND";
@@ -65,7 +71,7 @@ After=docker.service
 Requires=docker.service
 
 [Service]
-ExecStart=/usr/bin/bash /vagrant/install.sh start-adapter $IP $CONTROLIP
+ExecStart=/usr/bin/bash /srv/install.sh start-adapter $IP $CONTROLIP
 
 [Install]
 WantedBy=multi-user.target
@@ -97,7 +103,7 @@ After=powerstrip-flocker.service
 Requires=powerstrip-flocker.service
 
 [Service]
-ExecStart=/usr/bin/bash /vagrant/install.sh start-powerstrip
+ExecStart=/usr/bin/bash /srv/install.sh start-powerstrip
 
 [Install]
 WantedBy=multi-user.target
@@ -133,6 +139,23 @@ EOF
 }
 
 cmd-flocker-zfs-agent() {
+  echo "configure flocker-zfs-agent $@";
+  cat << EOF > /etc/systemd/system/flocker-zfs-agent.service
+[Unit]
+Description=Flocker ZFS Agent
+
+[Service]
+TimeoutStartSec=0
+ExecStart=/usr/bin/bash /srv/install.sh block-start-flocker-zfs-agent $@
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	cmd-link-systemd-target flocker-zfs-agent
+}
+
+cmd-block-start-flocker-zfs-agent() {
   local IP="$1";
   local CONTROLIP="$2";
 
@@ -140,20 +163,10 @@ cmd-flocker-zfs-agent() {
     CONTROLIP="127.0.0.1";
   fi
 
-  echo "configure flocker-zfs-agent";
-  cat << EOF > /etc/systemd/system/flocker-zfs-agent.service
-[Unit]
-Description=Flocker ZFS Agent
+  echo "wait for docker socket before starting flocker-zfs-agent";
 
-[Service]
-TimeoutStartSec=0
-ExecStart=/opt/flocker/bin/flocker-zfs-agent $IP $CONTROLIP
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-	cmd-link-systemd-target flocker-zfs-agent
+  while ! docker info; do echo "waiting for /var/run/docker.sock" && sleep 1; done;
+  /opt/flocker/bin/flocker-zfs-agent $IP $CONTROLIP
 }
 
 cmd-flocker-control-service() {
@@ -203,22 +216,24 @@ cmd-powerstrip() {
 cmd-setup-zfs-agent() {
   cmd-flocker-zfs-agent $@
 
-  # setup docker on /var/run/docker.real.sock
-  cmd-configure-docker
-
   # we need to start the zfs service so we have /etc/flocker/volume.json
   systemctl daemon-reload
   systemctl start flocker-zfs-agent.service
   cmd-wait-for-file /etc/flocker/volume.json
   systemctl stop flocker-zfs-agent.service
 
-  cmd-powerstrip $@
+  # setup docker on /var/run/docker.real.sock
+  cmd-configure-docker
+
+  
 }
 
 cmd-master() {
+  cmd-copy-script
   # write unit files for both services
   cmd-flocker-control-service
   cmd-setup-zfs-agent $@
+  cmd-powerstrip $@
 
   # kick off systemctl
   systemctl daemon-reload
@@ -230,7 +245,9 @@ cmd-master() {
 }
 
 cmd-minion() {
+  cmd-copy-script
   cmd-setup-zfs-agent $@
+  cmd-powerstrip $@
 
   systemctl daemon-reload
   systemctl enable flocker-zfs-agent.service
@@ -262,6 +279,7 @@ main() {
   master)                   shift; cmd-master $@;;
   minion)                   shift; cmd-minion $@;;
   flocker-zfs-agent)        shift; cmd-flocker-zfs-agent $@;;
+  block-start-flocker-zfs-agent) shift; cmd-block-start-flocker-zfs-agent $@;;
   flocker-control-service)  shift; cmd-flocker-control-service $@;;
   get-flocker-uuid)         shift; cmd-get-flocker-uuid $@;;
   configure-docker)         shift; cmd-configure-docker $@;;
