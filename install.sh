@@ -4,8 +4,8 @@ export FLOCKER_CONTROL_PORT=${FLOCKER_CONTROL_PORT:=80}
 
 # on subsequent vagrant ups - vagrant has not mounted /vagrant/install.sh
 # so we copy it into place
-cmd-copy-script() {
-  cp /vagrant/install.sh /srv/install.sh
+cmd-copy-vagrant-dir() {
+  cp -r /vagrant /srv/vagrant
 }
 
 cmd-get-flocker-uuid() {
@@ -26,7 +26,7 @@ cmd-wait-for-file() {
 cmd-configure-docker() {
   /usr/sbin/setenforce 0
 
-  echo "configuring docker to list on unix:///var/run/docker.real.sock";
+  echo "configuring docker to listen on unix:///var/run/docker.real.sock";
 
   # docker itself listens on docker.real.sock and powerstrip listens on docker.sock
   cat << EOF > /etc/sysconfig/docker-network
@@ -71,7 +71,8 @@ After=docker.service
 Requires=docker.service
 
 [Service]
-ExecStart=/usr/bin/bash /srv/install.sh start-adapter $IP $CONTROLIP
+ExecStart=/usr/bin/bash /srv/vagrant/install.sh start-adapter $IP $CONTROLIP
+ExecStop=/usr/bin/bash /srv/vagrant/install.sh docker-remove powerstrip-flocker
 
 [Install]
 WantedBy=multi-user.target
@@ -103,7 +104,8 @@ After=powerstrip-flocker.service
 Requires=powerstrip-flocker.service
 
 [Service]
-ExecStart=/usr/bin/bash /srv/install.sh start-powerstrip
+ExecStart=/usr/bin/bash /srv/vagrant/install.sh start-powerstrip
+ExecStop=/usr/bin/bash /srv/vagrant/install.sh docker-remove powerstrip
 
 [Install]
 WantedBy=multi-user.target
@@ -146,7 +148,7 @@ Description=Flocker ZFS Agent
 
 [Service]
 TimeoutStartSec=0
-ExecStart=/usr/bin/bash /srv/install.sh block-start-flocker-zfs-agent $@
+ExecStart=/usr/bin/bash /srv/vagrant/install.sh block-start-flocker-zfs-agent $@
 
 [Install]
 WantedBy=multi-user.target
@@ -229,7 +231,7 @@ cmd-setup-zfs-agent() {
 }
 
 cmd-master() {
-  cmd-copy-script
+  cmd-copy-vagrant-dir
   # write unit files for both services
   cmd-flocker-control-service
   cmd-setup-zfs-agent $@
@@ -245,7 +247,7 @@ cmd-master() {
 }
 
 cmd-minion() {
-  cmd-copy-script
+  cmd-copy-vagrant-dir
   cmd-setup-zfs-agent $@
   cmd-powerstrip $@
 
