@@ -194,8 +194,6 @@ cmd-powerstrip() {
 	# write adapters.yml
   cmd-powerstrip-config
 
-  
-
   # write unit files for powerstrip-flocker and powerstrip
   cmd-configure-adapter $@
   cmd-configure-powerstrip
@@ -230,6 +228,7 @@ cmd-setup-zfs-agent() {
   
 }
 
+# master <OWN_IP> <CONTROL_IP>
 cmd-master() {
   cmd-copy-vagrant-dir
   # write unit files for both services
@@ -246,6 +245,7 @@ cmd-master() {
   
 }
 
+# minion <OWN_IP> <CONTROL_IP>
 cmd-minion() {
   cmd-copy-vagrant-dir
   cmd-setup-zfs-agent $@
