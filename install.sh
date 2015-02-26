@@ -8,6 +8,17 @@ cmd-copy-vagrant-dir() {
   cp -r /vagrant /srv/vagrant
 }
 
+# copy insecure_private_key to /home/vagrant/.ssh/id_rsa and /root/.ssh/id_rsa
+# this allows the vagrant and root user to do ssh root@otherhost
+# the public key is already is authorized_keys for both root and vagrant
+cmd-setup-ssh-keys() {
+  cp /vagrant/insecure_private_key /root/.ssh/id_rsa
+  chmod 600 /root/.ssh/id_rsa
+  cp /vagrant/insecure_private_key /home/vagrant/.ssh/id_rsa
+  chmod 600 /home/vagrant/.ssh/id_rsa
+  chown vagrant:vagrant /home/vagrant/.ssh/id_rsa
+}
+
 # extract the current zfs-agent uuid from the volume.json - sed sed sed!
 cmd-get-flocker-uuid() {
   if [[ ! -f /etc/flocker/volume.json ]]; then
@@ -248,9 +259,12 @@ cmd-setup-zfs-agent() {
 # master <OWN_IP> <CONTROL_IP>
 cmd-master() {
   cmd-copy-vagrant-dir
+  cmd-setup-ssh-keys
+
   # write unit files for both services
   cmd-flocker-control-service
   cmd-setup-zfs-agent $@
+
   cmd-powerstrip $@
 
   # kick off systemctl
@@ -265,7 +279,10 @@ cmd-master() {
 # minion <OWN_IP> <CONTROL_IP>
 cmd-minion() {
   cmd-copy-vagrant-dir
+  cmd-setup-ssh-keys
+
   cmd-setup-zfs-agent $@
+
   cmd-powerstrip $@
 
   systemctl daemon-reload
