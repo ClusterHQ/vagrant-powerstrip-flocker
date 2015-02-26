@@ -8,6 +8,7 @@ cmd-copy-vagrant-dir() {
   cp -r /vagrant /srv/vagrant
 }
 
+# extract the current zfs-agent uuid from the volume.json - sed sed sed!
 cmd-get-flocker-uuid() {
   if [[ ! -f /etc/flocker/volume.json ]]; then
     >&2 echo "/etc/flocker/volume.json NOT FOUND";
@@ -16,6 +17,7 @@ cmd-get-flocker-uuid() {
   cat /etc/flocker/volume.json | sed 's/.*"uuid": "//' | sed 's/"}//'
 }
 
+# wait until the named file exists
 cmd-wait-for-file() {
   while [ ! -f $1 ]
   do
@@ -23,6 +25,7 @@ cmd-wait-for-file() {
   done
 }
 
+# configure docker to listen on a different unix socket and make sure selinux is not turned on
 cmd-configure-docker() {
   /usr/sbin/setenforce 0
 
@@ -44,22 +47,25 @@ EOF
   rm -f /var/run/docker.sock
 }
 
-
+# create a link for the named systemd unit so it starts at boot
 cmd-link-systemd-target() {
 	ln -sf /etc/systemd/system/$1.service /etc/systemd/system/multi-user.target.wants/$1.service
 }
 
+# stop and remove a named container
 cmd-docker-remove() {
   echo "remove container $1";
 	DOCKER_HOST="unix:///var/run/docker.real.sock" /usr/bin/docker stop $1 2>/dev/null || true
 	DOCKER_HOST="unix:///var/run/docker.real.sock" /usr/bin/docker rm $1 2>/dev/null || true
 }
 
+# docker pull a named container
 cmd-docker-pull() {
   echo "pull image $1";
 	DOCKER_HOST="unix:///var/run/docker.real.sock" /usr/bin/docker pull $1
 }
 
+# write a systemd unit for the powerstrip-flocker adapter
 cmd-configure-adapter() {
   local IP="$1";
   local CONTROLIP="$2";
@@ -81,6 +87,8 @@ EOF
 	cmd-link-systemd-target powerstrip-flocker
 }
 
+# the actual boot command for the powerstrip adapter
+# we run without -d so that systemd can manage the process properly
 cmd-start-adapter() {
 	cmd-docker-remove powerstrip-flocker
   local IP="$1";
@@ -95,6 +103,7 @@ cmd-start-adapter() {
     clusterhq/powerstrip-flocker:latest
 }
 
+# write the systemd unit file for powerstrip itself
 cmd-configure-powerstrip() {
   echo "configure powerstrip";
   cat << EOF > /etc/systemd/system/powerstrip.service
@@ -114,6 +123,7 @@ EOF
 	cmd-link-systemd-target powerstrip
 }
 
+# the boot step for the powerstrip container - start without -d so systemd can manage the process
 cmd-start-powerstrip() {
 	rm -f /var/run/docker.sock
 	cmd-docker-remove powerstrip
@@ -127,6 +137,7 @@ cmd-start-powerstrip() {
   chgrp vagrant /var/run/docker.sock
 }
 
+# write out adapters.yml for powerstrip
 cmd-powerstrip-config() {
   echo "write /etc/powerstrip-demo/adapters.yml";
   mkdir -p /etc/powerstrip-demo
@@ -140,6 +151,7 @@ adapters:
 EOF
 }
 
+# write systemd unit file for the zfs agent
 cmd-flocker-zfs-agent() {
   echo "configure flocker-zfs-agent $@";
   cat << EOF > /etc/systemd/system/flocker-zfs-agent.service
@@ -157,6 +169,9 @@ EOF
 	cmd-link-systemd-target flocker-zfs-agent
 }
 
+# runner for the zfs agent
+# we wait for there to be a docker socket by waiting for docker info
+# we then wait for there to be a powerstrip container
 cmd-block-start-flocker-zfs-agent() {
   local IP="$1";
   local CONTROLIP="$2";
@@ -171,6 +186,7 @@ cmd-block-start-flocker-zfs-agent() {
   /opt/flocker/bin/flocker-zfs-agent $IP $CONTROLIP
 }
 
+# write a systemd file for the control service
 cmd-flocker-control-service() {
 
   echo "configure flocker-control-service";
@@ -190,6 +206,7 @@ EOF
 	cmd-link-systemd-target flocker-control-service
 }
 
+# generic controller for the powerstrip containers
 cmd-powerstrip() {
 	# write adapters.yml
   cmd-powerstrip-config
